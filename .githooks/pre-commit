@@ -1,3 +1,19 @@
 #!/bin/sh
 set -eu
+
+if ! command -v mise >/dev/null 2>&1; then
+    for mise_bin in "$HOME/.local/bin/mise" /opt/homebrew/bin/mise /usr/local/bin/mise; do
+        if [ -x "$mise_bin" ]; then
+            PATH="${mise_bin%/*}:$PATH"
+            export PATH
+            break
+        fi
+    done
+fi
+
+if ! command -v mise >/dev/null 2>&1; then
+    printf 'mise is required for pre-commit. Install mise and follow README.md setup instructions.\n' >&2
+    exit 127
+fi
+
 exec mise run pre-commit

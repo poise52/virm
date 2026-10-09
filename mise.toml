@@ -1,36 +1,57 @@
+min_version = "2026.10.4"
+
 [tools]
 zig = "0.16.0"
 
 [settings]
 lockfile = true
+lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
 [hooks]
 enter = { task = "hooks-install" }
 postinstall = { task = "hooks-install" }
 
 [tasks.hooks-install]
-run = "git config --local core.hooksPath .githooks"
+description = "Install project Git hooks when running inside a repository"
+run = """
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  git config --local core.hooksPath .githooks
+fi
+"""
 
 [tasks.pre-commit]
+description = "Format staged Zig files and run all checks"
 run = "bash scripts/pre-commit.sh"
 
 [tasks.build]
+description = "Build the Debug executable"
 run = "zig build"
 
 [tasks.build-safe]
+description = "Build the ReleaseSafe executable"
 run = "zig build -Doptimize=ReleaseSafe"
 
 [tasks.test]
+description = "Run Debug tests"
 run = "zig build test -Doptimize=Debug --summary all"
 
 [tasks.test-safe]
+description = "Run ReleaseSafe tests"
 run = "zig build test -Doptimize=ReleaseSafe --summary all"
 
 [tasks.fmt]
+description = "Format Zig source and build files"
 run = "zig fmt src build.zig build.zig.zon"
 
 [tasks.fmt-check]
+description = "Check formatting of Zig source and build files"
 run = "zig fmt --check src build.zig build.zig.zon"
 
 [tasks.check]
-depends = ["fmt-check", "test", "test-safe", "build-safe"]
+description = "Run formatting, Debug tests, ReleaseSafe tests and build in order"
+run = [
+  { task = "fmt-check" },
+  { task = "test" },
+  { task = "test-safe" },
+  { task = "build-safe" },
+]
