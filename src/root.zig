@@ -13,6 +13,10 @@ pub const net = struct {
     pub const tcp_relay = @import("net/tcp_relay.zig");
 };
 
+pub const protocol = struct {
+    pub const socks5 = @import("protocol/socks5.zig");
+};
+
 // Re-export core networking abstractions
 pub const WorkerBufferPool = net.buffer_pool.WorkerBufferPool;
 pub const Buffer = net.buffer_pool.Buffer;
@@ -35,6 +39,20 @@ pub const KqueueReactor = net.kqueue_reactor.KqueueReactor;
 pub const TcpRelay = net.tcp_relay.TcpRelay;
 pub const RelayConfig = net.tcp_relay.RelayConfig;
 
+// Re-export SOCKS5 protocol abstractions
+pub const socks5 = protocol.socks5;
+pub const Socks5Handshake = socks5.Socks5Handshake;
+pub const Socks5Request = socks5.Socks5Request;
+pub const TargetAddress = socks5.TargetAddress;
+pub const TargetEndpoint = socks5.TargetEndpoint;
+pub const AuthMethod = socks5.AuthMethod;
+pub const Command = socks5.Command;
+pub const AddressType = socks5.AddressType;
+pub const ReplyCode = socks5.ReplyCode;
+pub const HandshakeState = socks5.HandshakeState;
+pub const HandshakeError = socks5.HandshakeError;
+pub const FeedResult = socks5.FeedResult;
+
 test {
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(platform);
@@ -45,4 +63,6 @@ test {
     std.testing.refAllDecls(net.tcp_lifecycle);
     std.testing.refAllDecls(net.kqueue_reactor);
     std.testing.refAllDecls(net.tcp_relay);
+    std.testing.refAllDecls(protocol);
+    std.testing.refAllDecls(protocol.socks5);
 }
