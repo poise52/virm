@@ -1,0 +1,36 @@
+[tools]
+zig = "0.16.0"
+
+[settings]
+lockfile = true
+
+[hooks]
+enter = { task = "hooks-install" }
+postinstall = { task = "hooks-install" }
+
+[tasks.hooks-install]
+run = "git config --local core.hooksPath .githooks"
+
+[tasks.pre-commit]
+run = "bash scripts/pre-commit.sh"
+
+[tasks.build]
+run = "zig build"
+
+[tasks.build-safe]
+run = "zig build -Doptimize=ReleaseSafe"
+
+[tasks.test]
+run = "zig build test -Doptimize=Debug --summary all"
+
+[tasks.test-safe]
+run = "zig build test -Doptimize=ReleaseSafe --summary all"
+
+[tasks.fmt]
+run = "zig fmt src build.zig build.zig.zon"
+
+[tasks.fmt-check]
+run = "zig fmt --check src build.zig build.zig.zon"
+
+[tasks.check]
+depends = ["fmt-check", "test", "test-safe", "build-safe"]
