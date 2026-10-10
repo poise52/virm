@@ -1,71 +1,121 @@
-const std = @import("std");
-const Io = std.Io;
+//! Virm SOCKS5 Proxy Server Executable (M1a.4)
 
+const std = @import("std");
 const virm = @import("virm");
+const darwin = virm.platform.darwin;
+const Router = virm.Router;
+const OutboundAction = virm.OutboundAction;
+const Socks5Service = virm.Socks5Service;
+
+fn parseAddress(str: []const u8) !struct { ip: [4]u8, port: u16 } {
+    var it = std.mem.splitScalar(u8, str, ':');
+    const ip_str = it.next() orelse return error.InvalidAddress;
+    const port_str = it.next() orelse return error.InvalidAddress;
+    if (it.next() != null) return error.InvalidAddress;
+
+    var ip: [4]u8 = undefined;
+    var oct_it = std.mem.splitScalar(u8, ip_str, '.');
+    for (0..4) |i| {
+        const part = oct_it.next() orelse return error.InvalidAddress;
+        ip[i] = try std.fmt.parseInt(u8, part, 10);
+    }
+    if (oct_it.next() != null) return error.InvalidAddress;
+
+    const port = try std.fmt.parseInt(u16, port_str, 10);
+    return .{ .ip = ip, .port = port };
+}
 
 pub fn main(init: std.process.Init) !void {
-    // Prints to stderr, unbuffered, ignoring potential errors.
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // This is appropriate for anything that lives as long as the process.
-    const arena: std.mem.Allocator = init.arena.allocator();
-
-    // Accessing command line arguments:
+    const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
-    for (args) |arg| {
-        std.log.info("arg: {s}", .{arg});
+
+    var listen_addr_str: []const u8 = "127.0.0.1:1080";
+    var default_action: OutboundAction = .direct;
+
+    var idx: usize = 1;
+    while (idx < args.len) : (idx += 1) {
+        const arg = args[idx];
+        if (std.mem.eql(u8, arg, "--listen") or std.mem.eql(u8, arg, "-l")) {
+            idx += 1;
+            if (idx >= args.len) {
+                std.debug.print("Error: missing value for --listen\n", .{});
+                return error.InvalidArguments;
+            }
+            listen_addr_str = args[idx];
+        } else if (std.mem.eql(u8, arg, "--default") or std.mem.eql(u8, arg, "-d")) {
+            idx += 1;
+            if (idx >= args.len) {
+                std.debug.print("Error: missing value for --default\n", .{});
+                return error.InvalidArguments;
+            }
+            const val = args[idx];
+            if (std.ascii.eqlIgnoreCase(val, "direct")) {
+                default_action = .direct;
+            } else if (std.ascii.eqlIgnoreCase(val, "block")) {
+                default_action = .block;
+            } else {
+                std.debug.print("Error: invalid default action '{s}' (must be 'direct' or 'block')\n", .{val});
+                return error.InvalidArguments;
+            }
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            std.debug.print(
+                \\Usage: virm [options]
+                \\
+                \\Options:
+                \\  --listen, -l <ip:port>      Listener address and port (default: 127.0.0.1:1080)
+                \\  --default, -d <action>      Default outbound action: direct or block (default: direct)
+                \\  --help, -h                  Display this help message
+                \\
+            , .{});
+            return;
+        } else {
+            std.debug.print("Unknown argument: {s}. Use --help for usage.\n", .{arg});
+            return error.InvalidArguments;
+        }
     }
 
-    // In order to do I/O operations need an `Io` instance.
-    const io = init.io;
+    const addr = try parseAddress(listen_addr_str);
 
-    // Stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
-    const stdout_writer = &stdout_file_writer.interface;
+    const listener_fd = try darwin.createNonBlockingTcpSocket();
+    defer darwin.closeSocket(listener_fd);
+    try darwin.setReuseAddress(listener_fd);
 
-    try stdout_writer.print("Virm Universal Proxy Core (M1a.2)\n", .{});
-
-    try stdout_writer.flush();
-}
-
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
-
-test "fuzz example" {
-    try std.testing.fuzz({}, testOne, .{});
-}
-
-fn testOne(context: void, smith: *std.testing.Smith) !void {
-    _ = context;
-    // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(u8) = .empty;
-    defer list.deinit(gpa);
-    while (!smith.eos()) switch (smith.value(enum { add_data, dup_data })) {
-        .add_data => {
-            const slice = try list.addManyAsSlice(gpa, smith.value(u4));
-            smith.bytes(slice);
-        },
-        .dup_data => {
-            if (list.items.len == 0) continue;
-            if (list.items.len > std.math.maxInt(u32)) return error.SkipZigTest;
-            const len = smith.valueRangeAtMost(u32, 1, @min(32, list.items.len));
-            const off = smith.valueRangeAtMost(u32, 0, @intCast(list.items.len - len));
-            try list.appendSlice(gpa, list.items[off..][0..len]);
-            try std.testing.expectEqualSlices(
-                u8,
-                list.items[off..][0..len],
-                list.items[list.items.len - len ..],
-            );
-        },
+    const bind_addr = darwin.sockaddr_in{
+        .port = std.mem.nativeToBig(u16, addr.port),
+        .addr = @bitCast(addr.ip),
     };
+
+    if (darwin.bind(listener_fd, @ptrCast(&bind_addr), @sizeOf(darwin.sockaddr_in)) < 0) {
+        std.debug.print("Failed to bind listener on {s}\n", .{listen_addr_str});
+        return error.BindFailed;
+    }
+
+    if (darwin.listen(listener_fd, 128) < 0) {
+        std.debug.print("Failed to listen on {s}\n", .{listen_addr_str});
+        return error.ListenFailed;
+    }
+
+    const router = Router.initStatic(&[_]virm.Rule{}, default_action);
+    var service = try Socks5Service.init(arena, listener_fd, router, .{});
+    defer service.deinit();
+
+    std.debug.print(
+        \\==================================================
+        \\  Virm SOCKS5 Server (M1a.4)
+        \\  Listening on {s}
+        \\  Default outbound: {s}
+        \\  Ready for SOCKS5 clients.
+        \\==================================================
+        \\
+    , .{
+        listen_addr_str,
+        if (default_action == .direct) "DIRECT" else "BLOCK",
+    });
+
+    while (true) {
+        _ = service.step(500) catch |err| {
+            std.debug.print("Reactor step error: {s}\n", .{@errorName(err)});
+            break;
+        };
+    }
 }

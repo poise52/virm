@@ -53,6 +53,7 @@ pub const connect = std.c.connect;
 pub const accept = std.c.accept;
 pub const getsockopt = std.c.getsockopt;
 pub const setsockopt = std.c.setsockopt;
+pub const getsockname = std.c.getsockname;
 pub const read = std.c.read;
 pub const write = std.c.write;
 pub const shutdown = std.c.shutdown;
@@ -81,6 +82,7 @@ pub const PlatformError = error{
     ListenFailed,
     ConnectionRefused,
     NetworkUnreachable,
+    HostUnreachable,
     AddressInUse,
     ConnectionReset,
     TimedOut,
@@ -213,10 +215,20 @@ pub fn connectNonBlocking(fd: fd_t, addr: sockaddr_in) PlatformError!ConnectResu
     return switch (errno) {
         @intFromEnum(std.posix.E.CONNREFUSED) => PlatformError.ConnectionRefused,
         @intFromEnum(std.posix.E.NETUNREACH) => PlatformError.NetworkUnreachable,
+        @intFromEnum(std.posix.E.HOSTUNREACH) => PlatformError.HostUnreachable,
         @intFromEnum(std.posix.E.ADDRINUSE) => PlatformError.AddressInUse,
         @intFromEnum(std.posix.E.TIMEDOUT) => PlatformError.TimedOut,
         else => PlatformError.Unexpected,
     };
+}
+
+/// Queries the local bound address of a connected socket via getsockname.
+pub fn getLocalAddress(fd: fd_t) PlatformError!sockaddr_in {
+    var raw_addr: sockaddr_in = undefined;
+    var len: socklen_t = @sizeOf(sockaddr_in);
+    const rc = getsockname(fd, @ptrCast(&raw_addr), &len);
+    if (rc < 0) return PlatformError.Unexpected;
+    return raw_addr;
 }
 
 /// Queries SO_ERROR to check if an asynchronous connect succeeded.
@@ -231,6 +243,7 @@ pub fn checkSocketConnected(fd: fd_t) PlatformError!bool {
     return switch (err) {
         @intFromEnum(std.posix.E.CONNREFUSED) => PlatformError.ConnectionRefused,
         @intFromEnum(std.posix.E.NETUNREACH) => PlatformError.NetworkUnreachable,
+        @intFromEnum(std.posix.E.HOSTUNREACH) => PlatformError.HostUnreachable,
         @intFromEnum(std.posix.E.TIMEDOUT) => PlatformError.TimedOut,
         @intFromEnum(std.posix.E.CONNRESET) => PlatformError.ConnectionReset,
         else => PlatformError.Unexpected,

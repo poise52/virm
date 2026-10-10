@@ -11,10 +11,15 @@ pub const net = struct {
     pub const tcp_lifecycle = @import("net/tcp_lifecycle.zig");
     pub const kqueue_reactor = @import("net/kqueue_reactor.zig");
     pub const tcp_relay = @import("net/tcp_relay.zig");
+    pub const socks5_service = @import("net/socks5_service.zig");
 };
 
 pub const protocol = struct {
     pub const socks5 = @import("protocol/socks5.zig");
+};
+
+pub const routing = struct {
+    pub const router = @import("routing/router.zig");
 };
 
 // Re-export core networking abstractions
@@ -38,6 +43,9 @@ pub const TcpLifecycleError = net.tcp_lifecycle.TcpLifecycleError;
 pub const KqueueReactor = net.kqueue_reactor.KqueueReactor;
 pub const TcpRelay = net.tcp_relay.TcpRelay;
 pub const RelayConfig = net.tcp_relay.RelayConfig;
+pub const Socks5Service = net.socks5_service.Socks5Service;
+pub const Socks5Config = net.socks5_service.Socks5Config;
+pub const Socks5Adapter = net.socks5_service.Socks5Adapter;
 
 // Re-export SOCKS5 protocol abstractions
 pub const socks5 = protocol.socks5;
@@ -53,6 +61,14 @@ pub const HandshakeState = socks5.HandshakeState;
 pub const HandshakeError = socks5.HandshakeError;
 pub const FeedResult = socks5.FeedResult;
 
+// Re-export Routing abstractions
+pub const Router = routing.router.Router;
+pub const Rule = routing.router.Rule;
+pub const OutboundAction = routing.router.OutboundAction;
+pub const Ipv4Cidr = routing.router.Ipv4Cidr;
+pub const Ipv6Cidr = routing.router.Ipv6Cidr;
+pub const matchDomainSuffix = routing.router.matchDomainSuffix;
+
 test {
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(platform);
@@ -63,6 +79,9 @@ test {
     std.testing.refAllDecls(net.tcp_lifecycle);
     std.testing.refAllDecls(net.kqueue_reactor);
     std.testing.refAllDecls(net.tcp_relay);
+    std.testing.refAllDecls(net.socks5_service);
     std.testing.refAllDecls(protocol);
     std.testing.refAllDecls(protocol.socks5);
+    std.testing.refAllDecls(routing);
+    std.testing.refAllDecls(routing.router);
 }
